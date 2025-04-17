@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>내 할일</title>
+    <link rel="stylesheet" href="./DoList.css" />
+  </head>
+  <body>
+    <div class="DoList-box">
+      <h1>나의 할일</h1>
+      <input type="text" id="noteInput" placeholder="할 일  입력" />
+      <button onclick="saveNote()">추가</button>
+
+      <h2>할 일 목록</h2>
+      <ul id="noteList"></ul>
+    </div>
+    <script>
+      let db;
+
+      // 1. IndexedDB 열기 또는 생성
+      const request = indexedDB.open("MyNotesDB", 1);
+
+      request.onupgradeneeded = function (e) {
+        db = e.target.result;
+        // notes라는 object store가 없으면 새로 생성
+        if (!db.objectStoreNames.contains("notes")) {
+          db.createObjectStore("notes", { keyPath: "id", autoIncrement: true });
+        }
+      };
+
+      request.onsuccess = function (e) {
+        db = e.target.result;
+        displayNotes();
+      };
+
+      request.onerror = function () {
+        alert("IndexedDB 열기 실패");
+      };
+
+      // 2. 메모 저장 함수
+      function saveNote() {
+        const input = document.getElementById("noteInput");
+        const text = input.value.trim();
+        if (!text) return;
+
+        const tx = db.transaction("notes", "readwrite");
+        const store = tx.objectStore("notes");
+        store.add({ text: text });
+
+        tx.oncomplete = function () {
+          input.value = "";
+          displayNotes();
+        };
+      }
+
+      // 수정
+      function updateNote(id, newText) {
+        const tx = db.transaction("notes", "readwrite");
+        const store = tx.objectStore("notes");
+
+        const getRequest = store.get(id);
+
+        getRequest.onsuccess = function () {
+          const note = getRequest.result;
+          note.text = newText;
+          store.put(note);
+        };
+
+        tx.oncomplete = function () {
+          displayNotes();
+        };
+      }
+
+      // 삭제
+      function deleteNote(id) {
+        const tx = db.transaction("notes", "readwrite");
+        const store = tx.objectStore("notes");
+        store.delete(id);
+
+        tx.oncomplete = function () {
+          displayNotes();
+        };
+      }
+
+      // 3. 메모 목록 출력 함수
+      function displayNotes() {
+        const list = document.getElementById("noteList");
+        list.innerHTML = "";
+
+        const tx = db.transaction("notes", "readonly");
+        const store = tx.objectStore("notes");
+
+        const request = store.openCursor();
+
+        request.onsuccess = function (e) {
+          const cursor = e.target.result;
+          if (cursor) {
+            const li = document.createElement("li");
+            li.textContent = cursor.value.text;
+
+            // 수정 버튼
+            const groupBtn = document.createElement("div");
+
+            const editBtn = document.createElement("button");
+            editBtn.textContent = "수정";
+            const note = cursor.value;
+            editBtn.onclick = function () {
+              li.innerHTML = "";
+
+              const input = document.createElement("input");
+              input.type = "text";
+              input.value = note.text;
+              li.appendChild(input);
+
+              const saveBtn = document.createElement("button");
+              saveBtn.textContent = "저장";
+              saveBtn.onclick = function () {
+                const newText = input.value.trim();
+                if (newText) {
+                  updateNote(note.id, newText);
+                }
+              };
+              li.appendChild(saveBtn);
+            };
+
+            const delBtn = document.createElement("button");
+            delBtn.textContent = "삭제";
+            delBtn.onclick = function () {
+              deleteNote(note.id);
+            };
+
+            groupBtn.appendChild(editBtn);
+            groupBtn.appendChild(delBtn);
+            li.appendChild(groupBtn);
+            list.appendChild(li);
+
+            cursor.continue();
+          }
+        };
+      }
+    </script>
+  </body>
+</html>
